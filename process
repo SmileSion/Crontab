@@ -1,0 +1,9 @@
+Tracking_tool-linux-amd64
+/home/track/bin/run.sh start
+
+
+Pmsgsend-linux-amd64
+/home/smssend/smsbin/run.sh start
+
+/home/smssend/smsbin/run.sh status
+/home/track/bin/run.sh status

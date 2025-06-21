@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Tracking And Pmsg protect at startup
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/home/Crontab/run.sh start
+Restart=on-failure
+WorkingDirectory=/home/Crontab
+
+[Install]
+WantedBy=multi-user.target
