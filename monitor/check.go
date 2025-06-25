@@ -19,11 +19,8 @@ type Program struct {
 
 // 运行命令并返回输出
 func runCommand(cmdStr string) (string, error) {
-	parts := strings.Fields(cmdStr)
-	if len(parts) == 0 {
-		return "", fmt.Errorf("命令为空：%q", cmdStr)
-	}
-	cmd := exec.Command(parts[0], parts[1:]...)
+	middleware.Logger.Printf("[Debug] 实际执行命令: %s", cmdStr)
+	cmd := exec.Command("bash", "-c", cmdStr)  // 通过bash -c执行整条命令字符串
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out
