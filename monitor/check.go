@@ -17,6 +17,7 @@ type Program struct {
 	StartCmd  string
 }
 
+// 运行命令并返回输出
 func runCommand(cmdStr string) (string, error) {
 	parts := strings.Fields(cmdStr)
 	if len(parts) == 0 {
@@ -30,12 +31,34 @@ func runCommand(cmdStr string) (string, error) {
 	return out.String(), err
 }
 
+// 判断输出中是否包含任意一个关键字
+func containsAny(s string, keywords []string) bool {
+	for _, kw := range keywords {
+		if strings.Contains(s, kw) {
+			return true
+		}
+	}
+	return false
+}
+
+// 检查并自动重启逻辑
 func checkAndRestart(p config.Program) {
 	statusOutput, err := runCommand(p.StatusCmd)
-	middleware.Logger.Printf("检查状态输出: %s", statusOutput)
 
-	// 状态异常：准备重启并发短信
-	if err != nil || strings.Contains(statusOutput, "not running") {
+	// 清洗并小写化输出
+	cleanOutput := strings.ToLower(strings.TrimSpace(statusOutput))
+
+	// 输出调试信息
+	middleware.Logger.Printf("[%s] 状态命令原始输出: %q", p.Name, statusOutput)
+	middleware.Logger.Printf("[%s] 状态命令清洗后输出: %q", p.Name, cleanOutput)
+
+	// 定义异常关键词
+	keywords := []string{"not running", "inactive", "failed", "stopped"}
+
+	// 判断是否异常
+	isNotRunning := err != nil || containsAny(cleanOutput, keywords)
+
+	if isNotRunning {
 		// 第一次短信：发现未运行
 		contentCheck := fmt.Sprintf("告警：您的程序 [%s] 未运行，正在尝试自动重启...", p.Name)
 		success, msg, uid := handler.SendSmsWithContent(contentCheck)
@@ -67,10 +90,11 @@ func checkAndRestart(p config.Program) {
 			middleware.Logger.Printf("短信发送失败 UID: %s，内容: %s\n失败原因: %s\n", uid, contentResult, msg)
 		}
 	} else {
-		middleware.Logger.Printf("%s 正常运行。\n", p.Name)
+		middleware.Logger.Printf("[%s] 正常运行。\n", p.Name)
 	}
 }
 
+// 扫描所有配置程序并检查
 func Run() {
 	for _, p := range config.Conf.Program {
 		checkAndRestart(p)
