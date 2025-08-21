@@ -1,23 +1,21 @@
+[[program]]
+name = "myapp"
+path = "/home/user/myapp"
+
+[[program]]
+name = "anotherapp"
+path = "/opt/anotherapp"
+
 [log]
-filepath = "./log/crontab.log"
-max_size = 50       # 单个文件最大大小（MB）
-max_backups = 10    # 最多保留旧文件数
-max_age = 7         # 最多保留天数
-compress = true     # 是否压缩
+filepath = "/var/log/crontab.log"
+max_size = 10
+max_backups = 5
+max_age = 30
+compress = true
 
 [msgconfig]
-addr = ""
-app_key = ""
-secret_key = ""
-phone = ""
-userid = ""
-
-[[program]]
-name = ""
-status_cmd = ""
-start_cmd = ""
-
-[[program]]
-name = ""
-status_cmd = ""
-start_cmd = ""
+addr = "http://sms.example.com"
+app_key = "encrypted_appkey"
+secret_key = "encrypted_secretkey"
+phone = "1234567890"
+userid = "1001"

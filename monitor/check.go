@@ -1,99 +1,109 @@
 package monitor
 
 import (
-	"bytes"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
+	"sync"
 
 	"crontab/config"
 	"crontab/handler"
 	"crontab/middleware"
 )
 
-type Program struct {
-	Name      string
-	StatusCmd string
-	StartCmd  string
+// 判断程序是否运行，使用完整路径匹配
+func isRunning(p config.Program) bool {
+    pid := os.Getpid() // 获取守护程序 PID
+    programPath := filepath.Join(p.Path, p.Name)
+
+    // 使用 ps + grep + 排除 bash -c 和自身 PID
+    cmdStr := fmt.Sprintf(
+        "ps -eo pid,cmd | grep '%s' | grep -v grep | grep -v 'bash -c' | grep -v '^ *%d '",
+        programPath, pid,
+    )
+
+    output, _ := runCommandOutput(cmdStr)
+    return strings.TrimSpace(output) != ""
 }
 
-// 运行命令并返回输出
-func runCommand(cmdStr string) (string, error) {
-	middleware.Logger.Printf("[Debug] 实际执行命令: %s", cmdStr)
-	cmd := exec.Command("bash", "-c", cmdStr)  // 通过bash -c执行整条命令字符串
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &out
-	err := cmd.Run()
-	return out.String(), err
+// 执行命令，不收集 stdout/stderr，只返回 error
+func runCommand(cmdStr string) error {
+	middleware.Logger.Printf("[Debug] 执行命令: %s", cmdStr)
+	cmd := exec.Command("bash", "-c", cmdStr)
+	return cmd.Run()
 }
 
-// 判断输出中是否包含任意一个关键字
-func containsAny(s string, keywords []string) bool {
-	for _, kw := range keywords {
-		if strings.Contains(s, kw) {
-			return true
-		}
-	}
-	return false
+// 执行命令并返回输出，用于 isRunning
+func runCommandOutput(cmdStr string) (string, error) {
+	middleware.Logger.Printf("[Debug] 执行命令: %s", cmdStr)
+	cmd := exec.Command("bash", "-c", cmdStr)
+	out, err := cmd.Output()
+	return string(out), err
 }
 
 // 检查并自动重启逻辑
 func checkAndRestart(p config.Program) {
-	statusOutput, err := runCommand(p.StatusCmd)
-
-	// 清洗并小写化输出
-	cleanOutput := strings.ToLower(strings.TrimSpace(statusOutput))
-
-	// 输出调试信息
-	middleware.Logger.Printf("[%s] 状态命令原始输出: %q", p.Name, statusOutput)
-	middleware.Logger.Printf("[%s] 状态命令清洗后输出: %q", p.Name, cleanOutput)
-
-	// 定义异常关键词
-	keywords := []string{"not running", "inactive", "failed", "stopped"}
-
-	// 判断是否异常
-	isNotRunning := err != nil || containsAny(cleanOutput, keywords)
-
-	if isNotRunning {
-		// 第一次短信：发现未运行
-		contentCheck := fmt.Sprintf("告警：您的程序 [%s] 未运行，正在尝试自动重启...", p.Name)
-		success, msg, uid := handler.SendSmsWithContent(contentCheck)
-		if success {
-			middleware.Logger.Printf("短信发送成功 UID: %s，内容: %s\n返回消息: %s\n", uid, contentCheck, msg)
-		} else {
-			middleware.Logger.Printf("短信发送失败 UID: %s，内容: %s\n失败原因: %s\n", uid, contentCheck, msg)
+	defer func() {
+		if r := recover(); r != nil {
+			middleware.Logger.Printf("[%s] 异常恢复: %v", p.Name, r)
 		}
+	}()
 
-		middleware.Logger.Printf("%s 未运行，正在尝试重启...", p.Name)
+	if isRunning(p) {
+		middleware.Logger.Printf("[%s] 正常运行。", p.Name)
+		return
+	}
 
-		// 执行启动命令
-		startOutput, startErr := runCommand(p.StartCmd)
-		var contentResult string
-
-		if startErr != nil {
-			middleware.Logger.Printf("启动 %s 失败：%v\n输出：%s\n", p.Name, startErr, startOutput)
-			contentResult = fmt.Sprintf("重启失败：程序 [%s] 启动失败。\n错误信息：%v", p.Name, startErr)
-		} else {
-			middleware.Logger.Printf("启动 %s 成功。输出：%s\n", p.Name, startOutput)
-			contentResult = fmt.Sprintf("恢复通知：程序 [%s] 启动成功，系统已完成自动重启。", p.Name)
-		}
-
-		// 第二次短信：发送启动结果
-		success, msg, uid = handler.SendSmsWithContent(contentResult)
-		if success {
-			middleware.Logger.Printf("短信发送成功 UID: %s，内容: %s\n返回消息: %s\n", uid, contentResult, msg)
-		} else {
-			middleware.Logger.Printf("短信发送失败 UID: %s，内容: %s\n失败原因: %s\n", uid, contentResult, msg)
-		}
+	// 程序未运行，发送告警短信
+	contentCheck := fmt.Sprintf("告警：程序 [%s] 未运行，尝试自动重启...", p.Name)
+	success, msg, uid := handler.SendSmsWithContent(contentCheck)
+	if success {
+		middleware.Logger.Printf("短信发送成功 UID: %s, 内容: %s", uid, contentCheck)
 	} else {
-		middleware.Logger.Printf("[%s] 正常运行。\n", p.Name)
+		middleware.Logger.Printf("短信发送失败 UID: %s, 内容: %s, 失败原因: %s", uid, contentCheck, msg)
+	}
+
+	middleware.Logger.Printf("[%s] 未运行，开始重启...", p.Name)
+
+	// 使用完整路径，支持目录+程序名配置
+	programPath := filepath.Join(p.Path, p.Name)
+	dir := filepath.Dir(programPath)
+	file := filepath.Base(programPath)
+	logPath := filepath.Join(dir, "run.log")
+
+	// nohup 后台启动，追加日志
+	startCmd := fmt.Sprintf("cd %s && nohup ./%s >> %s 2>&1 &", dir, file, logPath)
+
+	startErr := runCommand(startCmd)
+	var contentResult string
+	if startErr != nil {
+		middleware.Logger.Printf("[%s] 启动失败: %v", p.Name, startErr)
+		contentResult = fmt.Sprintf("重启失败：程序 [%s] 启动失败。\n错误信息：%v", p.Name, startErr)
+	} else {
+		middleware.Logger.Printf("[%s] 启动成功", p.Name)
+		contentResult = fmt.Sprintf("恢复通知：程序 [%s] 启动成功，系统已完成自动重启。", p.Name)
+	}
+
+	// 发送启动结果短信
+	success, msg, uid = handler.SendSmsWithContent(contentResult)
+	if success {
+		middleware.Logger.Printf("短信发送成功 UID: %s, 内容: %s", uid, contentResult)
+	} else {
+		middleware.Logger.Printf("短信发送失败 UID: %s, 内容: %s, 失败原因: %s", uid, contentResult, msg)
 	}
 }
 
-// 扫描所有配置程序并检查
+// 扫描所有配置程序，并发检查
 func Run() {
+	var wg sync.WaitGroup
 	for _, p := range config.Conf.Program {
-		checkAndRestart(p)
+		wg.Add(1)
+		go func(pr config.Program) {
+			defer wg.Done()
+			checkAndRestart(pr)
+		}(p)
 	}
+	wg.Wait()
 }
