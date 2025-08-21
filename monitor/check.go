@@ -13,35 +13,36 @@ import (
 	"crontab/middleware"
 )
 
-// 判断程序是否运行，使用完整路径匹配
+// 判断程序是否运行，只匹配程序名
 func isRunning(p config.Program) bool {
-    pid := os.Getpid() // 获取守护程序 PID
-    programPath := filepath.Join(p.Path, p.Name)
+    pid := os.Getpid() // 守护程序自身 PID
 
-    // 使用 ps + grep + 排除 bash -c 和自身 PID
+    // 只匹配程序名，不匹配路径
     cmdStr := fmt.Sprintf(
-        "ps -eo pid,cmd | grep '%s' | grep -v grep | grep -v 'bash -c' | grep -v '^ *%d '",
-        programPath, pid,
+        "ps -eo pid,cmd | grep '%s' | grep -v '^ *%d '",
+        p.Name, pid,
     )
 
     output, _ := runCommandOutput(cmdStr)
+	middleware.Logger.Printf("[%s] isRunning 输出: %q", p.Name, output)
     return strings.TrimSpace(output) != ""
-}
-
-// 执行命令，不收集 stdout/stderr，只返回 error
-func runCommand(cmdStr string) error {
-	middleware.Logger.Printf("[Debug] 执行命令: %s", cmdStr)
-	cmd := exec.Command("bash", "-c", cmdStr)
-	return cmd.Run()
 }
 
 // 执行命令并返回输出，用于 isRunning
 func runCommandOutput(cmdStr string) (string, error) {
-	middleware.Logger.Printf("[Debug] 执行命令: %s", cmdStr)
-	cmd := exec.Command("bash", "-c", cmdStr)
-	out, err := cmd.Output()
-	return string(out), err
+    middleware.Logger.Printf("[Debug] 执行命令: %s", cmdStr)
+    cmd := exec.Command("bash", "-c", cmdStr)
+    out, err := cmd.Output()
+    return string(out), err
 }
+
+// 执行命令，不收集 stdout/stderr，只返回 error
+func runCommand(cmdStr string) error {
+    middleware.Logger.Printf("[Debug] 执行命令: %s", cmdStr)
+    cmd := exec.Command("bash", "-c", cmdStr)
+    return cmd.Run()
+}
+
 
 // 检查并自动重启逻辑
 func checkAndRestart(p config.Program) {
