@@ -19,7 +19,7 @@ func isRunning(p config.Program) bool {
 
     // 只匹配程序名，不匹配路径
     cmdStr := fmt.Sprintf(
-        "ps -eo pid,cmd | grep '%s' | grep -v '^ *%d '",
+        "ps -eo pid,cmd | grep '%s' | grep -v '^ *%d ' | grep -v 'bash -c' | grep -v 'grep'",
         p.Name, pid,
     )
 
