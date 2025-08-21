@@ -9,7 +9,7 @@ import (
 	"sync"
 
 	"crontab/config"
-	"crontab/handler"
+	// "crontab/handler"
 	"crontab/middleware"
 )
 
@@ -58,13 +58,13 @@ func checkAndRestart(p config.Program) {
 	}
 
 	// 程序未运行，发送告警短信
-	contentCheck := fmt.Sprintf("告警：程序 [%s] 未运行，尝试自动重启...", p.Name)
-	success, msg, uid := handler.SendSmsWithContent(contentCheck)
-	if success {
-		middleware.Logger.Printf("短信发送成功 UID: %s, 内容: %s", uid, contentCheck)
-	} else {
-		middleware.Logger.Printf("短信发送失败 UID: %s, 内容: %s, 失败原因: %s", uid, contentCheck, msg)
-	}
+	// contentCheck := fmt.Sprintf("告警：程序 [%s] 未运行，尝试自动重启...", p.Name)
+	// success, msg, uid := handler.SendSmsWithContent(contentCheck)
+	// if success {
+	// 	middleware.Logger.Printf("短信发送成功 UID: %s, 内容: %s", uid, contentCheck)
+	// } else {
+	// 	middleware.Logger.Printf("短信发送失败 UID: %s, 内容: %s, 失败原因: %s", uid, contentCheck, msg)
+	// }
 
 	middleware.Logger.Printf("[%s] 未运行，开始重启...", p.Name)
 
@@ -78,22 +78,22 @@ func checkAndRestart(p config.Program) {
 	startCmd := fmt.Sprintf("cd %s && nohup ./%s >> %s 2>&1 &", dir, file, logPath)
 
 	startErr := runCommand(startCmd)
-	var contentResult string
+	// var contentResult string
 	if startErr != nil {
 		middleware.Logger.Printf("[%s] 启动失败: %v", p.Name, startErr)
-		contentResult = fmt.Sprintf("重启失败：程序 [%s] 启动失败。\n错误信息：%v", p.Name, startErr)
+		// contentResult = fmt.Sprintf("重启失败：程序 [%s] 启动失败。\n错误信息：%v", p.Name, startErr)
 	} else {
 		middleware.Logger.Printf("[%s] 启动成功", p.Name)
-		contentResult = fmt.Sprintf("恢复通知：程序 [%s] 启动成功，系统已完成自动重启。", p.Name)
+		// contentResult = fmt.Sprintf("恢复通知：程序 [%s] 启动成功，系统已完成自动重启。", p.Name)
 	}
 
 	// 发送启动结果短信
-	success, msg, uid = handler.SendSmsWithContent(contentResult)
-	if success {
-		middleware.Logger.Printf("短信发送成功 UID: %s, 内容: %s", uid, contentResult)
-	} else {
-		middleware.Logger.Printf("短信发送失败 UID: %s, 内容: %s, 失败原因: %s", uid, contentResult, msg)
-	}
+	// success, msg, uid = handler.SendSmsWithContent(contentResult)
+	// if success {
+	// 	middleware.Logger.Printf("短信发送成功 UID: %s, 内容: %s", uid, contentResult)
+	// } else {
+	// 	middleware.Logger.Printf("短信发送失败 UID: %s, 内容: %s, 失败原因: %s", uid, contentResult, msg)
+	// }
 }
 
 // 扫描所有配置程序，并发检查
